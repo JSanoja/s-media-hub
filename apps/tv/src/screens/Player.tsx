@@ -12,7 +12,8 @@ import { ErrorView, Loading, useLoad } from './common';
 
 const SEEK = 10;
 
-const REPORT_EVERY_MS = 15_000;
+/** Mínimo entre dos guardados de progreso (salir del video o terminarlo guarda siempre). */
+const PROGRESS_MIN_GAP_MS = 20_000;
 
 export function Player({ id, start }: { id: string; start?: number }) {
   const { data: item, error, loading, retry } = useLoad(() => api.item(id), [id]);
@@ -22,12 +23,17 @@ export function Player({ id, start }: { id: string; start?: number }) {
   const [subsOn, setSubsOn] = useState(true);
   const [mediaError, setMediaError] = useState<string | null>(null);
   const hideTimer = useRef<number | undefined>(undefined);
-  const lastReport = useRef(0);
+  // Arranca en "ahora": no tiene sentido guardar la posición 0 apenas empieza el video.
+  const lastReport = useRef(Date.now());
 
-  /** Guarda el progreso en la API (WU-09) si hay perfil. */
-  const report = (ended = false) => {
+  /**
+   * Guarda el progreso en la API (WU-09) si hay perfil, como mucho una vez cada 20 s.
+   * `force` (salir, terminar) guarda aunque el último guardado sea reciente.
+   */
+  const report = (ended = false, force = false) => {
     const v = video.current;
     if (!v || !getSession() || !Number.isFinite(v.currentTime)) return;
+    if (!force && Date.now() - lastReport.current < PROGRESS_MIN_GAP_MS) return;
     lastReport.current = Date.now();
     api
       .reportProgress(id, {
@@ -41,7 +47,7 @@ export function Player({ id, start }: { id: string; start?: number }) {
   // Al salir del reproductor (Atrás, otra ruta) se guarda la posición y deja de "estar viendo".
   useEffect(
     () => () => {
-      report();
+      report(false, true);
       setNowPlaying(null);
     },
     [],
@@ -110,7 +116,7 @@ export function Player({ id, start }: { id: string; start?: number }) {
   }, []);
 
   const onEnded = async () => {
-    report(true);
+    report(true, true);
     const { next } = await api.next(id).catch(() => ({ next: null }));
     if (next) navigate({ name: 'play', id: next.id }, { replace: true });
     else history.back();
@@ -139,7 +145,7 @@ export function Player({ id, start }: { id: string; start?: number }) {
         onTimeUpdate={(e) => {
           const v = e.currentTarget;
           setTime({ current: v.currentTime, duration: v.duration, paused: v.paused });
-          if (Date.now() - lastReport.current > REPORT_EVERY_MS) {
+          if (Date.now() - lastReport.current >= PROGRESS_MIN_GAP_MS) {
             report();
             playing(v);
           }

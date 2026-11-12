@@ -5,6 +5,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.view.KeyEvent
 import android.view.View
 import android.widget.TextView
@@ -44,7 +45,8 @@ class PlayerActivity : AppCompatActivity() {
         const val EXTRA_RESULT_POSITION_MS = "positionMs"
         const val EXTRA_RESULT_ENDED = "ended"
         private const val SEEK_MS = 10_000L
-        private const val REPORT_EVERY_MS = 15_000L
+        /** Mínimo entre dos guardados de progreso; también es el período del reporte (y del heartbeat). */
+        private const val REPORT_EVERY_MS = 20_000L
         private const val CONTROLLER_TIMEOUT_MS = 4_000L
         private const val SYNC_STEP_MS = 500
         private const val SYNC_FINE_MS = 100
@@ -62,6 +64,8 @@ class PlayerActivity : AppCompatActivity() {
     private var syncSubId: String? = null
     /** Hay un ajuste esperando a aplicarse (Handler.hasCallbacks es API 29+). */
     private var syncPending = false
+    /** Último guardado de progreso (elapsedRealtime); se reinicia al cargar cada video. */
+    private var lastProgressAt = 0L
     private var currentItem: JSONObject? = null
     private var profileToken: String? = null
     private var deviceId: String? = null
@@ -102,7 +106,7 @@ class PlayerActivity : AppCompatActivity() {
         exo.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 if (playbackState == Player.STATE_ENDED) {
-                    reportProgress(ended = true)
+                    reportProgress(ended = true, force = true)
                     playNext()
                 }
             }
@@ -150,6 +154,8 @@ class PlayerActivity : AppCompatActivity() {
 
     private fun load(item: JSONObject, startMs: Long) {
         currentItem = item
+        // No se guarda la posición inicial: el primer guardado llega a los 20 s.
+        lastProgressAt = SystemClock.elapsedRealtime()
         closeSyncPanel()
         subtitleOffsets.clear()
         item.optJSONArray("subtitles")?.let { subs ->
@@ -329,7 +335,7 @@ class PlayerActivity : AppCompatActivity() {
         main.postDelayed(autoHide, CONTROLLER_TIMEOUT_MS)
     }
 
-    /** Cada 15 s: guarda la posición (si reproduce) y manda el heartbeat del dispositivo. */
+    /** Cada 20 s: guarda la posición (si reproduce) y manda el heartbeat del dispositivo. */
     private val periodicReport: Runnable = object : Runnable {
         override fun run() {
             if (player?.isPlaying == true) reportProgress(ended = false)
@@ -358,11 +364,17 @@ class PlayerActivity : AppCompatActivity() {
         DeviceHeartbeat.send(io, base, id, profileToken, nowPlaying)
     }
 
-    /** PUT /api/v1/items/:id/progress con el token del perfil (si hay perfil). */
-    private fun reportProgress(ended: Boolean) {
+    /**
+     * PUT /api/v1/items/:id/progress con el token del perfil (si hay perfil), como mucho una vez
+     * cada 20 s. `force` (fin del video, salir) guarda aunque el último guardado sea reciente.
+     */
+    private fun reportProgress(ended: Boolean, force: Boolean = false) {
         val token = profileToken ?: return
         val item = currentItem ?: return
         val p = player ?: return
+        val now = SystemClock.elapsedRealtime()
+        if (!force && now - lastProgressAt < REPORT_EVERY_MS) return
+        lastProgressAt = now
         val durationMs = p.duration.takeIf { it != C.TIME_UNSET && it > 0 }
         val positionMs = if (ended) (durationMs ?: p.currentPosition) else p.currentPosition
         val body = JSONObject()
@@ -473,7 +485,7 @@ class PlayerActivity : AppCompatActivity() {
 
     private fun finishWithResult(ended: Boolean) {
         main.removeCallbacks(periodicReport)
-        if (!ended) reportProgress(ended = false)
+        if (!ended) reportProgress(ended = false, force = true)
         heartbeat(stopped = true)
         val data = Intent()
             .putExtra(EXTRA_RESULT_ID, currentItem?.optString("id"))
@@ -494,6 +506,8 @@ class PlayerActivity : AppCompatActivity() {
 
     override fun onStop() {
         super.onStop()
+        // A segundo plano (Home): se guarda siempre, Android puede cerrar la app después.
+        reportProgress(ended = false, force = true)
         player?.pause()
         // En segundo plano no se manda nada: el dispositivo pasa a inactivo a los 2 min (WU-19).
         main.removeCallbacks(periodicReport)

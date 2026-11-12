@@ -81,8 +81,8 @@ ffmpeg and ffprobe are bundled. You don't need to install them.
 1. **Clone the repository:**
 
    ```bash
-   git clone https://github.com/JSanoja/s-hub.git
-   cd s-hub
+   git clone https://github.com/JSanoja/s-media-hub.git
+   cd s-media-hub
    ```
 
 2. **Install dependencies (all workspaces):**
