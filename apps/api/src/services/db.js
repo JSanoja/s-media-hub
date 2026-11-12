@@ -75,6 +75,8 @@ const MIGRATIONS = [
     lang        TEXT,
     confidence  REAL
   );
+  -- subtitle_offsets: ajuste de sincronización (WU-18), retirado el 2026-11-12. La tabla queda
+  -- (las migraciones no se reescriben: hay bases en v4) pero el código ya no la usa.
   CREATE TABLE subtitle_offsets (
     item_id     TEXT NOT NULL,
     sub_id      TEXT NOT NULL,

@@ -4,8 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { VIDEO_EXTENSIONS, SUBTITLE_EXTENSIONS } from '../lib/safePath.js';
-import { decodeSubtitle, srtToVtt, shiftVtt } from '../lib/subtitles.js';
-import { parseOffset } from '../services/subtitles.js';
+import { decodeSubtitle, srtToVtt } from '../lib/subtitles.js';
 import { rateLimit } from '../lib/rateLimit.js';
 
 const CONTENT_TYPES = {
@@ -37,13 +36,11 @@ export function createMediaRouter({ library, thumbs }) {
     await send(res, file, { maxAge: '1d' });
   });
 
-  // ?offsetMs=-1500 desplaza los tiempos (WU-18): positivo = más tarde, negativo = antes.
   router.get('/:id/subtitles.vtt', async (req, res) => {
-    const offsetMs = parseOffset(req.query.offsetMs);
     const file = await library.getFilePath(req.params.id, SUBTITLE_EXTENSIONS);
     const text = decodeSubtitle(await readFile(file));
     const vtt = path.extname(file).toLowerCase() === '.srt' ? srtToVtt(text) : text;
-    res.type('text/vtt; charset=utf-8').send(shiftVtt(vtt, offsetMs));
+    res.type('text/vtt; charset=utf-8').send(vtt);
   });
 
   // Stream del video con HTTP Range (206) — lo que usa el Chromecast para reproducir y adelantar.

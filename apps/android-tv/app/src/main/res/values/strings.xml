@@ -9,11 +9,5 @@
     <string name="error_message">No se pudo abrir %1$s.\n\n¿Está corriendo la API en la PC y en la misma red?</string>
     <string name="retry">Reintentar</string>
     <string name="change_server">Cambiar servidor</string>
-    <string name="sync_panel">Sincronizar subtítulos · %1$s\n%2$s %3$s\n%4$s</string>
-    <string name="sync_later">(aparecen más tarde)</string>
-    <string name="sync_earlier">(aparecen antes)</string>
-    <string name="sync_none">(sin ajuste)</string>
-    <string name="sync_hint">← antes · → después (0,5 s) · ↑ ↓ fino (0,1 s) · OK listo</string>
-    <string name="sync_no_subtitles">Este video no tiene subtítulos</string>
     <string name="player_error">No se pudo reproducir: %1$s</string>
 </resources>

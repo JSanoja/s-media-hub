@@ -28,8 +28,7 @@ export const ITEM_TYPES = /** @type {const} */ (['movie', 'episode', 'video']);
  * @property {string} lang    ISO 639-1 ("es", "en") o "und"
  * @property {string} label   "Español", "English (forzados)", ...
  * @property {'name'|'content'|null} langSource  idioma por nombre ("peli.es.srt"), detectado por contenido, o null (WU-18)
- * @property {number} offsetMs  ajuste de sincronización guardado para este video (0 = ninguno)
- * @property {string} url     WebVTT absoluto (incluye ?offsetMs= si hay ajuste)
+ * @property {string} url     WebVTT absoluto
  */
 
 /**

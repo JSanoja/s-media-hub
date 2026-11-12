@@ -57,7 +57,7 @@ export function createApp(config, deps = {}) {
   const withCors = cors(config.corsOrigins ?? ['*']);
   app.use('/api/v1/profiles', withCors, createProfilesRouter({ profiles }));
   app.use('/api/v1/devices', withCors, createDevicesRouter({ devices, profiles, library }));
-  app.use('/api/v1', withCors, createV1Router({ config, library, profiles, history, subtitles }));
+  app.use('/api/v1', withCors, createV1Router({ config, library, profiles, history }));
   app.use('/media', withCors, createMediaRouter({ library, thumbs }));
 
   // Interfaz nueva para la TV (apps/tv, WU-11). Ruteo por hash → no necesita fallback SPA.

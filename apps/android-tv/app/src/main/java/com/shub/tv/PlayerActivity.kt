@@ -8,7 +8,6 @@ import android.os.Looper
 import android.os.SystemClock
 import android.view.KeyEvent
 import android.view.View
-import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.annotation.OptIn
@@ -33,8 +32,7 @@ import java.util.concurrent.Executors
  * Reproductor nativo (Media3/ExoPlayer): MKV, MP4, HEVC, AC3/EAC3 passthrough y subtítulos VTT.
  * Recibe {"item": Item, "startSec": n} (contrato /api/v1) y al terminar pasa al siguiente episodio.
  *
- * Control remoto: OK = play/pausa · ←/→ = −10 s/+10 s · ↑ = mostrar controles
- * · ↓ = sincronizar subtítulos (WU-18) · Atrás = salir.
+ * Control remoto: OK = play/pausa · ←/→ = −10 s/+10 s · ↑/↓ = mostrar controles · Atrás = salir.
  */
 @OptIn(UnstableApi::class)
 class PlayerActivity : AppCompatActivity() {
@@ -48,22 +46,10 @@ class PlayerActivity : AppCompatActivity() {
         /** Mínimo entre dos guardados de progreso; también es el período del reporte (y del heartbeat). */
         private const val REPORT_EVERY_MS = 20_000L
         private const val CONTROLLER_TIMEOUT_MS = 4_000L
-        private const val SYNC_STEP_MS = 500
-        private const val SYNC_FINE_MS = 100
-        private const val SYNC_MAX_MS = 600_000
-        private const val SYNC_APPLY_DELAY_MS = 800L
-        private const val SYNC_PANEL_TIMEOUT_MS = 6_000L
     }
 
     private var player: ExoPlayer? = null
     private lateinit var playerView: PlayerView
-    private lateinit var syncPanel: TextView
-    /** Ajuste de sincronización por subtítulo (id → ms) del video actual (WU-18). */
-    private val subtitleOffsets = mutableMapOf<String, Int>()
-    /** Subtítulo que se está ajustando (el activo al abrir el panel). */
-    private var syncSubId: String? = null
-    /** Hay un ajuste esperando a aplicarse (Handler.hasCallbacks es API 29+). */
-    private var syncPending = false
     /** Último guardado de progreso (elapsedRealtime); se reinicia al cargar cada video. */
     private var lastProgressAt = 0L
     private var currentItem: JSONObject? = null
@@ -76,7 +62,6 @@ class PlayerActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_player)
         playerView = findViewById(R.id.player_view)
-        syncPanel = findViewById(R.id.sync_panel)
 
         val raw = intent.getStringExtra(EXTRA_JSON)
         if (raw == null) {
@@ -144,7 +129,7 @@ class PlayerActivity : AppCompatActivity() {
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
-                if (syncPanel.visibility == View.VISIBLE) closeSyncPanel() else finishWithResult(ended = false)
+                finishWithResult(ended = false)
             }
         })
 
@@ -156,16 +141,8 @@ class PlayerActivity : AppCompatActivity() {
         currentItem = item
         // No se guarda la posición inicial: el primer guardado llega a los 20 s.
         lastProgressAt = SystemClock.elapsedRealtime()
-        closeSyncPanel()
-        subtitleOffsets.clear()
-        item.optJSONArray("subtitles")?.let { subs ->
-            for (i in 0 until subs.length()) {
-                val s = subs.getJSONObject(i)
-                subtitleOffsets[s.getString("id")] = s.optInt("offsetMs", 0)
-            }
-        }
         player?.apply {
-            setMediaItem(buildMediaItem(item, defaultSubId = null), startMs)
+            setMediaItem(buildMediaItem(item), startMs)
             prepare()
             playWhenReady = true
         }
@@ -173,27 +150,19 @@ class PlayerActivity : AppCompatActivity() {
         main.postDelayed(periodicReport, REPORT_EVERY_MS)
     }
 
-    /**
-     * MediaItem con los subtítulos del item, cada uno con su ajuste de sincronización en la URL
-     * (?offsetMs=). `defaultSubId` = el que queda seleccionado (por defecto, el primero).
-     */
-    private fun buildMediaItem(item: JSONObject, defaultSubId: String?): MediaItem {
+    /** MediaItem con los subtítulos del item (VTT); el primero queda seleccionado por defecto. */
+    private fun buildMediaItem(item: JSONObject): MediaItem {
         val subtitles = mutableListOf<MediaItem.SubtitleConfiguration>()
         item.optJSONArray("subtitles")?.let { subs ->
             for (i in 0 until subs.length()) {
                 val s = subs.getJSONObject(i)
-                val id = s.getString("id")
                 val lang = s.optString("lang")
-                val offset = subtitleOffsets[id] ?: 0
-                val baseUrl = s.getString("url").substringBefore('?')
-                val url = if (offset != 0) "$baseUrl?offsetMs=$offset" else baseUrl
-                val isDefault = if (defaultSubId != null) id == defaultSubId else i == 0
-                subtitles += MediaItem.SubtitleConfiguration.Builder(Uri.parse(url))
-                    .setId(id)
+                subtitles += MediaItem.SubtitleConfiguration.Builder(Uri.parse(s.getString("url")))
+                    .setId(s.getString("id"))
                     .setMimeType(MimeTypes.TEXT_VTT)
                     .setLanguage(if (lang.isEmpty() || lang == "und") null else lang)
                     .setLabel(s.optString("label"))
-                    .setSelectionFlags(if (isDefault) C.SELECTION_FLAG_DEFAULT else 0)
+                    .setSelectionFlags(if (i == 0) C.SELECTION_FLAG_DEFAULT else 0)
                     .build()
             }
         }
@@ -203,125 +172,6 @@ class PlayerActivity : AppCompatActivity() {
             .setSubtitleConfigurations(subtitles)
             .setMediaMetadata(MediaMetadata.Builder().setTitle(titleOf(item)).build())
             .build()
-    }
-
-    // ---- Sincronizar subtítulos (WU-18) ----
-
-    /** Id (de la API) del subtítulo seleccionado ahora, o el primero si no se puede saber. */
-    private fun activeSubtitleId(): String? {
-        val ids = subtitleOffsets.keys
-        if (ids.isEmpty()) return null
-        player?.currentTracks?.groups?.forEach { group ->
-            if (group.type != C.TRACK_TYPE_TEXT) return@forEach
-            for (i in 0 until group.length) {
-                if (!group.isTrackSelected(i)) continue
-                // ExoPlayer antepone "n:" al id de los subtítulos externos.
-                val formatId = group.getTrackFormat(i).id ?: continue
-                ids.firstOrNull { formatId == it || formatId.endsWith(":$it") }?.let { return it }
-            }
-        }
-        return currentItem?.optJSONArray("subtitles")?.optJSONObject(0)?.optString("id")
-    }
-
-    private fun subtitleLabel(id: String): String {
-        val subs = currentItem?.optJSONArray("subtitles") ?: return ""
-        for (i in 0 until subs.length()) {
-            val s = subs.getJSONObject(i)
-            if (s.getString("id") == id) return s.optString("label")
-        }
-        return ""
-    }
-
-    private fun openSyncPanel() {
-        val id = activeSubtitleId()
-        if (id == null) {
-            Toast.makeText(this, R.string.sync_no_subtitles, Toast.LENGTH_SHORT).show()
-            return
-        }
-        syncSubId = id
-        playerView.hideController()
-        syncPanel.visibility = View.VISIBLE
-        renderSyncPanel()
-    }
-
-    private fun closeSyncPanel() {
-        if (!::syncPanel.isInitialized) return
-        syncPanel.visibility = View.GONE
-        main.removeCallbacks(closeSync)
-        // Si quedó un cambio pendiente, se aplica ya.
-        if (syncPending) {
-            main.removeCallbacks(applySync)
-            applySync.run()
-        }
-    }
-
-    private val closeSync = Runnable { closeSyncPanel() }
-
-    private fun renderSyncPanel() {
-        val id = syncSubId ?: return
-        val ms = subtitleOffsets[id] ?: 0
-        val value = String.format(java.util.Locale("es"), "%+.1f s", ms / 1000.0)
-        val note = getString(
-            when {
-                ms > 0 -> R.string.sync_later
-                ms < 0 -> R.string.sync_earlier
-                else -> R.string.sync_none
-            },
-        )
-        syncPanel.text = getString(R.string.sync_panel, subtitleLabel(id), value, note, getString(R.string.sync_hint))
-        main.removeCallbacks(closeSync)
-        main.postDelayed(closeSync, SYNC_PANEL_TIMEOUT_MS)
-    }
-
-    private fun nudgeSync(deltaMs: Int) {
-        val id = syncSubId ?: return
-        val next = ((subtitleOffsets[id] ?: 0) + deltaMs).coerceIn(-SYNC_MAX_MS, SYNC_MAX_MS)
-        subtitleOffsets[id] = next
-        renderSyncPanel()
-        // Se aplica cuando se deja de tocar (recargar el subtítulo en cada tecla sería brusco).
-        main.removeCallbacks(applySync)
-        syncPending = true
-        main.postDelayed(applySync, SYNC_APPLY_DELAY_MS)
-    }
-
-    /** Recarga el subtítulo con el nuevo ajuste en la misma posición y lo guarda en la API. */
-    private val applySync = Runnable {
-        syncPending = false
-        val item = currentItem ?: return@Runnable
-        val id = syncSubId ?: return@Runnable
-        val p = player ?: return@Runnable
-        val position = p.currentPosition
-        val wasPlaying = p.playWhenReady
-        p.setMediaItem(buildMediaItem(item, defaultSubId = id), position)
-        p.prepare()
-        p.playWhenReady = wasPlaying
-        saveOffset(item.getString("id"), id, subtitleOffsets[id] ?: 0)
-    }
-
-    /** PUT /api/v1/items/:id/subtitles/:subId/offset → queda guardado para la próxima vez. */
-    private fun saveOffset(itemId: String, subId: String, offsetMs: Int) {
-        val base = apiBase() ?: return
-        val body = JSONObject().put("offsetMs", offsetMs).toString()
-        try {
-            io.execute {
-                try {
-                    val conn = URL("$base/api/v1/items/$itemId/subtitles/$subId/offset")
-                        .openConnection() as HttpURLConnection
-                    conn.requestMethod = "PUT"
-                    conn.connectTimeout = 5_000
-                    conn.readTimeout = 5_000
-                    conn.doOutput = true
-                    conn.setRequestProperty("Content-Type", "application/json")
-                    conn.outputStream.use { it.write(body.toByteArray()) }
-                    conn.responseCode
-                    conn.disconnect()
-                } catch (e: Exception) {
-                    // Sin red: el ajuste vale para esta reproducción, pero no queda guardado.
-                }
-            }
-        } catch (e: java.util.concurrent.RejectedExecutionException) {
-            // Pantalla cerrándose.
-        }
     }
 
     /** Oculta los controles tras unos segundos sin teclas si está reproduciendo (aunque el foco
@@ -439,24 +289,6 @@ class PlayerActivity : AppCompatActivity() {
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         val p = player
-        // Panel de sincronización abierto: las flechas ajustan, OK cierra.
-        if (syncPanel.visibility == View.VISIBLE) {
-            val delta = when (event.keyCode) {
-                KeyEvent.KEYCODE_DPAD_LEFT -> -SYNC_STEP_MS
-                KeyEvent.KEYCODE_DPAD_RIGHT -> SYNC_STEP_MS
-                KeyEvent.KEYCODE_DPAD_UP -> SYNC_FINE_MS
-                KeyEvent.KEYCODE_DPAD_DOWN -> -SYNC_FINE_MS
-                else -> null
-            }
-            if (delta != null) {
-                if (event.action == KeyEvent.ACTION_DOWN) nudgeSync(delta)
-                return true
-            }
-            if (event.keyCode == KeyEvent.KEYCODE_DPAD_CENTER || event.keyCode == KeyEvent.KEYCODE_ENTER) {
-                if (event.action == KeyEvent.ACTION_UP) closeSyncPanel()
-                return true
-            }
-        }
         // Cualquier tecla con los controles visibles reinicia la cuenta del autoocultado.
         if (event.action == KeyEvent.ACTION_DOWN && playerView.isControllerFullyVisible) scheduleAutoHide()
         if (p != null && event.action == KeyEvent.ACTION_DOWN && !playerView.isControllerFullyVisible) {
@@ -472,10 +304,6 @@ class PlayerActivity : AppCompatActivity() {
                 KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
                     p.playWhenReady = !p.playWhenReady
                     playerView.showController()
-                    return true
-                }
-                KeyEvent.KEYCODE_DPAD_DOWN -> {
-                    openSyncPanel()
                     return true
                 }
             }
@@ -516,8 +344,6 @@ class PlayerActivity : AppCompatActivity() {
     override fun onDestroy() {
         main.removeCallbacks(periodicReport)
         main.removeCallbacks(autoHide)
-        main.removeCallbacks(closeSync)
-        main.removeCallbacks(applySync)
         // shutdown (no shutdownNow): deja terminar el último reporte de progreso.
         io.shutdown()
         player?.release()

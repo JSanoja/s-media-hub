@@ -3,11 +3,10 @@ import { Router } from 'express';
 import { HttpError } from '../lib/errors.js';
 import { requireProfile, optionalProfile } from '../lib/auth.js';
 import { VIDEO_EXTENSIONS } from '../lib/safePath.js';
-import { parseOffset } from '../services/subtitles.js';
 
 const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : undefined);
 
-export function createV1Router({ config, library, profiles, history, subtitles }) {
+export function createV1Router({ config, library, profiles, history }) {
   const router = Router();
   const withProfile = optionalProfile(profiles);
   const needProfile = requireProfile(profiles);
@@ -18,21 +17,10 @@ export function createV1Router({ config, library, profiles, history, subtitles }
       profileId,
       items.map((i) => i.id),
     );
-    for (const item of items) {
-      item.progress = map.get(item.id) ?? null;
-      if (item.subtitles) applyOffsets(item);
-    }
+    for (const item of items) item.progress = map.get(item.id) ?? null;
     return items;
   }
 
-  /** Ajuste de sincronización guardado (WU-18): offsetMs en cada subtítulo y en su URL. */
-  function applyOffsets(item) {
-    const offsets = subtitles?.offsetsFor(item.id) ?? new Map();
-    for (const sub of item.subtitles) {
-      sub.offsetMs = offsets.get(sub.id) ?? 0;
-      if (sub.offsetMs) sub.url = `${sub.url}?offsetMs=${sub.offsetMs}`;
-    }
-  }
   function decorateFolder(folder, profileId) {
     decorateItems(folder.items, profileId);
     if (!profileId) return folder;
@@ -78,7 +66,6 @@ export function createV1Router({ config, library, profiles, history, subtitles }
       try {
         const item = await library.getItem(row.item_id);
         item.progress = history.toProgress(row);
-        if (item.subtitles) applyOffsets(item);
         items.push(item);
       } catch {
         // El archivo ya no existe (se movió o borró): no se muestra.
@@ -102,16 +89,6 @@ export function createV1Router({ config, library, profiles, history, subtitles }
         ended: body.ended === true,
       }),
     );
-  });
-
-  // Ajuste de sincronización de un subtítulo de este video (WU-18). Vale para todos los perfiles.
-  router.put('/items/:id/subtitles/:subId/offset', async (req, res) => {
-    const item = await library.getItem(req.params.id);
-    if (!item.subtitles?.some((s) => s.id === req.params.subId)) {
-      throw new HttpError(404, 'NOT_FOUND', 'Ese subtítulo no es de este video');
-    }
-    const offsetMs = parseOffset((req.body ?? {}).offsetMs ?? null);
-    res.json({ offsetMs: subtitles.setOffset(item.id, req.params.subId, offsetMs) });
   });
 
   router.post('/items/:id/watched', needProfile, async (req, res) => {

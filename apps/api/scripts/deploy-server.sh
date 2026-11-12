@@ -68,11 +68,15 @@ SSH_OPTS=(-o ControlMaster=auto -o ControlPath="$CM_DIR/cm" -o ControlPersist=12
 rsh() { ssh "${SSH_OPTS[@]}" "$TARGET" "$@"; }
 
 # Rutas locales efectivas (mismo criterio que src/config.js: relativas a apps/api).
-read -r LOCAL_CACHE LOCAL_MEDIA < <(cd "$API" && node -e '
+# Una ruta por línea: pueden tener espacios (ej. "/mnt/d/AI - FOLDER/...").
+{
+  read -r LOCAL_CACHE
+  read -r LOCAL_MEDIA
+} < <(cd "$API" && node -e '
   const path = require("node:path");
   try { process.loadEnvFile(".env"); } catch {}
   const r = (v, d) => path.resolve(v || d);
-  console.log(r(process.env.CACHE_DIR, "../../cache"), r(process.env.MEDIA_ROOT, "public/source"));
+  console.log(r(process.env.CACHE_DIR, "../../cache") + "\n" + r(process.env.MEDIA_ROOT, "public/source"));
 ')
 
 echo "==> Conectando a $TARGET"
@@ -85,8 +89,11 @@ echo "    Destino: $REMOTE_DIR"
 # ---------------------------------------------------------------- setup (sudo)
 if [ "$SETUP" = 1 ]; then
   echo "==> Setup del servidor (puede pedir la contraseña de sudo)"
-  ssh -t "${SSH_OPTS[@]}" "$TARGET" "PORT='$PORT' LAN_CIDR='$LAN_CIDR' bash -s" <<'EOF'
+  # El script va como argumento (no por stdin) para que ssh -t tenga terminal y sudo pueda pedir la contraseña.
+  SETUP_SCRIPT="$(
+    cat <<'EOF'
 set -euo pipefail
+sudo -v
 need_node=1
 if command -v node >/dev/null; then
   node -e 'const [a,b]=process.versions.node.split(".").map(Number); process.exit(a>22||(a===22&&b>=13)?0:1)' && need_node=0
@@ -108,6 +115,10 @@ if command -v ufw >/dev/null && sudo ufw status | grep -q "Status: active"; then
   echo "    ufw: puerto $PORT abierto para $LAN_CIDR"
 fi
 EOF
+  )"
+  SETUP_B64="$(printf '%s' "$SETUP_SCRIPT" | base64 -w0)"
+  ssh -t "${SSH_OPTS[@]}" "$TARGET" \
+    "PORT='$PORT' LAN_CIDR='$LAN_CIDR' bash -c \"\$(echo $SETUP_B64 | base64 -d)\""
 fi
 
 # ---------------------------------------------------------------- build + empaquetado

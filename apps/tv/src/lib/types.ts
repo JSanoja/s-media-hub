@@ -10,8 +10,6 @@ export interface Subtitle {
   label: string;
   /** De dónde salió el idioma (WU-18): nombre del archivo, contenido o ninguno ("und"). */
   langSource: 'name' | 'content' | null;
-  /** Ajuste de sincronización guardado; ya viene aplicado en `url`. */
-  offsetMs: number;
   url: string;
 }
 export interface Progress {

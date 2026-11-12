@@ -26,29 +26,28 @@ Every URL the API returns is **absolute** and built from `PUBLIC_BASE_URL`. Ids 
 
 Endpoints marked 🔑 require a profile session (header `X-Profile-Token`). On the others the header is optional: when present, items include that profile's `progress`.
 
-| Endpoint                                        | Returns                                                                                               |
-| ----------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `GET /api/health`                               | `{ status: "ok" }`                                                                                    |
-| `GET /api/v1/config`                            | `{ publicBaseUrl, castReceiverAppId, version }`                                                       |
-| `GET /api/v1/library[?path=<folderId>]`         | Folder: `{ id, type, title, year, parentId, posterUrl, folders[], items[] }`                          |
-| `GET /api/v1/items/:id`                         | Video with `streamUrl`, `thumbUrl`, `posterUrl`, `subtitles[]`, `size`, `progress`                    |
-| `GET /api/v1/items/:id/next`                    | `{ next: Item \| null }` (natural order, crosses seasons)                                             |
-| `GET /api/v1/continue-watching` 🔑              | Items in progress for the profile, most recent first                                                  |
-| `PUT /api/v1/items/:id/progress` 🔑             | `{ positionSec, durationSec?, deviceId?, ended? }` → `progress` (≥ 90 % marks it watched)             |
-| `POST` / `DELETE /api/v1/items/:id/watched` 🔑  | Mark or unmark the video as watched                                                                   |
-| `PUT /api/v1/items/:id/subtitles/:subId/offset` | `{ offsetMs }` (±600000) → saves that subtitle's sync offset for the video                            |
-| `GET /api/v1/profiles`                          | Profiles `[{ id, name, color }]`                                                                      |
-| `POST /api/v1/profiles/:id/session`             | `{ pin, deviceId }` → `{ token, profile }` · 401 `INVALID_PIN` (+`attemptsLeft`) · 429 `PIN_LOCKED`   |
-| `GET /api/v1/profiles/me`                       | Profile of the `X-Profile-Token` header (401 `PROFILE_REQUIRED`)                                      |
-| `DELETE /api/v1/profiles/session`               | Log out (header `X-Profile-Token`)                                                                    |
-| `PUT /api/v1/profiles/:id/pin`                  | `{ currentPin, newPin, deviceId }` → 204, closes all of the profile's sessions                        |
-| `POST /api/v1/devices/heartbeat`                | `{ deviceId, kind, name?, model?, appVersion?, nowPlaying? }` → Device (profile taken from the token) |
-| `GET /api/v1/devices[?active=1]`                | Devices (active = heartbeat less than `DEVICE_ACTIVE_SECONDS` ago, default 120 s) and what they play  |
-| `DELETE /api/v1/devices/:id`                    | Forget a device (204 · 404)                                                                           |
-| `GET /media/:id`                                | Video with HTTP Range (206)                                                                           |
-| `GET /media/:id/thumb.jpg`                      | Thumbnail (generated on first request, then cached)                                                   |
-| `GET /media/:id/subtitles.vtt[?offsetMs=]`      | Subtitle as WebVTT (`.srt` converted; UTF-8 or Windows-1252). `offsetMs` shifts every cue             |
-| `GET /media/folders/:id/cover`                  | Folder poster (`cover` > `poster` > `folder`; `.webp` > `.jpg` > `.png`)                              |
+| Endpoint                                       | Returns                                                                                               |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `GET /api/health`                              | `{ status: "ok" }`                                                                                    |
+| `GET /api/v1/config`                           | `{ publicBaseUrl, castReceiverAppId, version }`                                                       |
+| `GET /api/v1/library[?path=<folderId>]`        | Folder: `{ id, type, title, year, parentId, posterUrl, folders[], items[] }`                          |
+| `GET /api/v1/items/:id`                        | Video with `streamUrl`, `thumbUrl`, `posterUrl`, `subtitles[]`, `size`, `progress`                    |
+| `GET /api/v1/items/:id/next`                   | `{ next: Item \| null }` (natural order, crosses seasons)                                             |
+| `GET /api/v1/continue-watching` 🔑             | Items in progress for the profile, most recent first                                                  |
+| `PUT /api/v1/items/:id/progress` 🔑            | `{ positionSec, durationSec?, deviceId?, ended? }` → `progress` (≥ 90 % marks it watched)             |
+| `POST` / `DELETE /api/v1/items/:id/watched` 🔑 | Mark or unmark the video as watched                                                                   |
+| `GET /api/v1/profiles`                         | Profiles `[{ id, name, color }]`                                                                      |
+| `POST /api/v1/profiles/:id/session`            | `{ pin, deviceId }` → `{ token, profile }` · 401 `INVALID_PIN` (+`attemptsLeft`) · 429 `PIN_LOCKED`   |
+| `GET /api/v1/profiles/me`                      | Profile of the `X-Profile-Token` header (401 `PROFILE_REQUIRED`)                                      |
+| `DELETE /api/v1/profiles/session`              | Log out (header `X-Profile-Token`)                                                                    |
+| `PUT /api/v1/profiles/:id/pin`                 | `{ currentPin, newPin, deviceId }` → 204, closes all of the profile's sessions                        |
+| `POST /api/v1/devices/heartbeat`               | `{ deviceId, kind, name?, model?, appVersion?, nowPlaying? }` → Device (profile taken from the token) |
+| `GET /api/v1/devices[?active=1]`               | Devices (active = heartbeat less than `DEVICE_ACTIVE_SECONDS` ago, default 120 s) and what they play  |
+| `DELETE /api/v1/devices/:id`                   | Forget a device (204 · 404)                                                                           |
+| `GET /media/:id`                               | Video with HTTP Range (206)                                                                           |
+| `GET /media/:id/thumb.jpg`                     | Thumbnail (generated on first request, then cached)                                                   |
+| `GET /media/:id/subtitles.vtt`                 | Subtitle as WebVTT (`.srt` converted; UTF-8 or Windows-1252)                                          |
+| `GET /media/folders/:id/cover`                 | Folder poster (`cover` > `poster` > `folder`; `.webp` > `.jpg` > `.png`)                              |
 
 Folder types (detected automatically):
 
@@ -92,7 +91,7 @@ src/
   server.js              HTTP/HTTPS startup + graceful shutdown
   app.js                 createApp(config) (testable)
   config.js              environment variables (validated)
-  routes/v1.js           /api/v1 (config, library, items, next, history, subtitle offsets)
+  routes/v1.js           /api/v1 (config, library, items, next, history)
   routes/media.js        /media (stream, thumbnail, subtitles, covers)
   routes/profiles.js     /api/v1/profiles
   routes/devices.js      /api/v1/devices
@@ -101,7 +100,7 @@ src/
   services/profiles.js   PIN profiles (scrypt), token sessions, attempt lockout
   services/history.js    per-profile watch state ("Continue watching", watched)
   services/devices.js    devices and heartbeat
-  services/subtitles.js  detected language (cached) and sync offsets
+  services/subtitles.js  detected subtitle language (cached)
   services/ffmpeg.js     spawn wrapper for ffmpeg/ffprobe
   services/thumbs.js     thumbnails in CACHE_DIR (deduplicated)
   lib/                   ids, naming, subtitles, langDetect, safePath, cors, rateLimit, errors, auth

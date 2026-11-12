@@ -7,7 +7,7 @@
 
 S-HUB is a self-hosted home media hub. A Node/Express API streams your local movie and TV show library over the home network (LAN). A TV app shows it and plays it on a **Chromecast with Google TV**: a 10-foot web UI you drive with the remote, inside an Android TV app with a native Media3 player.
 
-It plays your own files on the big screen without any cloud service, account or transcoding server. Media3 decodes MKV, HEVC, AC3/EAC3 and SRT subtitles natively. S-HUB also keeps per-profile history ("Continue watching", watched marks), PIN-protected profiles, subtitle language detection and per-video subtitle sync.
+It plays your own files on the big screen without any cloud service, account or transcoding server. Media3 decodes MKV, HEVC, AC3/EAC3 and SRT subtitles natively. S-HUB also keeps per-profile history ("Continue watching", watched marks), PIN-protected profiles, and subtitle language detection.
 
 ---
 
@@ -174,13 +174,11 @@ npm run format    # Prettier
 
 **On the TV:** open S-HUB from the apps row, pick a profile and enter its PIN.
 
-| Key    | Library     | Player                                              |
-| ------ | ----------- | --------------------------------------------------- |
-| Arrows | move around | ← / → seek 10 s · ↑ show controls · ↓ subtitle sync |
-| OK     | open / play | play / pause                                        |
-| Back   | go back     | exit                                                |
-
-In the subtitle sync panel, ← / → shift the subtitles by 0.5 s and ↑ / ↓ by 0.1 s. The offset is saved for that video.
+| Key    | Library     | Player                                |
+| ------ | ----------- | ------------------------------------- |
+| Arrows | move around | ← / → seek 10 s · ↑ / ↓ show controls |
+| OK     | open / play | play / pause                          |
+| Back   | go back     | exit                                  |
 
 **API examples** (`curl`):
 
