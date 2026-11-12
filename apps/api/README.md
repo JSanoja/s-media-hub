@@ -106,6 +106,7 @@ src/
   services/thumbs.js     thumbnails in CACHE_DIR (deduplicated)
   lib/                   ids, naming, subtitles, langDetect, safePath, cors, rateLimit, errors, auth
 scripts/migrate-thumbs.js
+scripts/deploy-server.sh deploys the API to a Linux server over SSH (see the root README)
 test/                    node:test
 ```
 

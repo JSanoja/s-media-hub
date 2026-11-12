@@ -231,6 +231,19 @@ cd apps/android-tv && ./gradlew assembleDebug lintDebug
 
 On WSL2, use `networkingMode=mirrored` so the LAN can reach the API, and allow the port with a Hyper-V firewall rule.
 
+**Linux server on the LAN (over SSH):** `apps/api/scripts/deploy-server.sh` builds the TV UI and copies only what the API needs to run. It installs production dependencies on the server and runs the API as a systemd user service.
+
+```bash
+bash apps/api/scripts/deploy-server.sh user@192.168.1.80 --setup --with-db   # first time
+bash apps/api/scripts/deploy-server.sh user@192.168.1.80                     # later updates
+```
+
+- `--setup` installs Node 24 if it's missing, enables lingering and opens the port in `ufw`.
+- `--with-db` copies the local `shub.db` (profiles, PINs, history) and backs up the server's copy first.
+- `--with-thumbs` and `--sync-media` also copy the thumbnails and the library.
+- The server's `.env` is created on the first run and never overwritten.
+- Run `bash apps/api/scripts/deploy-server.sh --help` for every option.
+
 **Planned:** a Docker image on a local Linux server, with the library and the cache mounted as volumes (WU-14). HTTPS (`PROTOCOL=https`) is only needed for casting from a phone (WU-13, optional).
 
 ---
