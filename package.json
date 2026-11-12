@@ -1,0 +1,30 @@
+{
+  "name": "s-hub",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Biblioteca de videos local con API Node y front compatible con Google Chromecast",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "dev": "npm run dev --workspace @s-hub/api",
+    "dev:tv": "npm run dev --workspace @s-hub/tv",
+    "build": "npm run build --workspace @s-hub/tv",
+    "start": "npm run start --workspace @s-hub/api",
+    "test": "npm run test --workspaces --if-present",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.13.0",
+    "globals": "^17.13.0",
+    "prettier": "^3.9.10"
+  }
+}

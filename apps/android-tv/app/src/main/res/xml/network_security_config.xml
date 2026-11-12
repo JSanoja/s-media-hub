@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- La API de S-HUB corre en la red local por HTTP (decisión del proyecto). La URL del servidor
+     se configura desde la app, así que se permite HTTP en general; es una app de uso hogareño. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>
