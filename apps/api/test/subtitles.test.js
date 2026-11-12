@@ -60,7 +60,6 @@ before(async () => {
     '1\n00:00:01,000 --> 00:00:02,000\n¡Ey!',
   );
   const app = createApp({
-    publicDir: tmp,
     mediaRoot: media,
     cacheDir: path.join(tmp, 'cache'),
     thumbsDir: path.join(tmp, 'cache', 'thumbs'),

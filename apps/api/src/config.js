@@ -208,7 +208,6 @@ export function loadConfig(env = process.env, { networkInterfaces = os.networkIn
     dbPath: path.join(cacheDir, 'shub.db'),
     profilePins,
     deviceActiveSeconds,
-    publicDir: path.join(apiRoot, 'public'),
     // Build de la interfaz para TV (apps/tv). Se sirve en /tv/.
     tvDir: dir('TV_DIR', '../tv/dist'),
     castReceiverAppId,

@@ -25,8 +25,9 @@ logs/
 *.jks
 *.keystore
 
-# Medios de prueba dentro de la API vieja
+# Biblioteca por defecto (MEDIA_ROOT=public/source): nunca se versiona
 apps/api/public/source/**
+# Excepción: póster de ejemplo de la convención de biblioteca (cover.<ext>)
 !apps/api/public/source/cover.jpg
 
 # SO / editores

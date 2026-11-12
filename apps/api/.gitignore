@@ -1,2 +1,3 @@
 public/source/**
+# Excepción: póster de ejemplo de la convención de biblioteca (cover.<ext>)
 !public/source/cover.jpg

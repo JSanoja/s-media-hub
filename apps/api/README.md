@@ -2,7 +2,7 @@
 
 Node/Express API that serves the local video library. Part of the `s-hub` monorepo.
 
-It serves API v1 for the TV UI and the Android TV app, media streaming, profiles, watch history, devices and subtitles, plus the legacy endpoints of the old Angular front end (to be removed in WU-15).
+It serves API v1 for the TV UI and the Android TV app: the library, media streaming, profiles, watch history, devices and subtitles. It also serves the built TV UI at `/tv/`.
 
 ## Requirements
 
@@ -78,30 +78,12 @@ Series/                       → series
 
 Errors are always JSON: `{ "error": { "code": "NOT_FOUND", "message": "..." } }`. Common codes: 400 `INVALID_PATH`, 404 `NOT_FOUND`, 415 `UNSUPPORTED_TYPE`.
 
-## Legacy endpoints (old Angular front end, until WU-15)
+## Static routes
 
-### `GET /api/browse?path=/series/season` (legacy)
+- `/` → redirects to `/tv/`.
+- `/tv/` → the TV UI (`apps/tv/dist`, see `TV_DIR`).
 
-Lists a folder of `MEDIA_ROOT`. When there is more than one video, it generates the missing thumbnails in the background.
-
-```json
-{
-  "path": "/siliconvalley/season1",
-  "folders": [],
-  "videos": ["cap1.mp4", "cap2.mp4"],
-  "cover": "/source/siliconvalley/season1/cover.jpg"
-}
-```
-
-### `GET /api/thumb?path=/series/season/cap1.mp4` (legacy)
-
-Generates the video's thumbnail. Responds `sucess` (plain text, sic) or a JSON error.
-
-### Static files
-
-- `/` → build of the old Angular front end (`public/`, removed in WU-15).
-- `/source/...` → videos and images from `MEDIA_ROOT`, with HTTP Range support.
-- `/tv/` → the new TV UI (`apps/tv/dist`).
+The old Angular front end and its endpoints (`/api/browse`, `/api/thumb`, `/source/*`, `/thumbs/*`) were removed in WU-15. Media is only reachable through `/media/:id`.
 
 ## Structure
 
@@ -114,7 +96,6 @@ src/
   routes/media.js        /media (stream, thumbnail, subtitles, covers)
   routes/profiles.js     /api/v1/profiles
   routes/devices.js      /api/v1/devices
-  routes/legacy.js       /api/browse, /api/thumb (old front end)
   services/library.js    walks and classifies the library
   services/db.js         embedded SQLite (node:sqlite) + migrations → CACHE_DIR/shub.db
   services/profiles.js   PIN profiles (scrypt), token sessions, attempt lockout

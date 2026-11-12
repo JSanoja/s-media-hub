@@ -28,7 +28,6 @@ before(async () => {
     await writeFile(path.join(media, f), 'video');
   }
   const app = createApp({
-    publicDir: tmp,
     mediaRoot: media,
     cacheDir: path.join(tmp, 'cache'),
     thumbsDir: path.join(tmp, 'cache', 'thumbs'),

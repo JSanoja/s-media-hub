@@ -3,7 +3,6 @@ import morgan from 'morgan';
 import helmet from 'helmet';
 import { createFfmpeg } from './services/ffmpeg.js';
 import { createThumbs } from './services/thumbs.js';
-import { createLegacyRouter } from './routes/legacy.js';
 import { createV1Router } from './routes/v1.js';
 import { createMediaRouter } from './routes/media.js';
 import { createLibrary } from './services/library.js';
@@ -16,7 +15,6 @@ import { createDevices } from './services/devices.js';
 import { createSubtitles } from './services/subtitles.js';
 import { createDevicesRouter } from './routes/devices.js';
 import { errorHandler, notFound, HttpError } from './lib/errors.js';
-import { resolveInside, SERVABLE_EXTENSIONS } from './lib/safePath.js';
 
 /** Factory testeable: arma la app Express a partir de la configuración (ver config.js). */
 export function createApp(config, deps = {}) {
@@ -43,7 +41,7 @@ export function createApp(config, deps = {}) {
   app.disable('x-powered-by');
   app.use(
     helmet({
-      // CSP se define en WU-11 junto con el front nuevo (el Angular viejo usa Google Fonts).
+      // Sin CSP por ahora: la interfaz de TV corre en el WebView de la app (pendiente definirla).
       contentSecurityPolicy: false,
       // El Chromecast carga videos/imágenes desde otro origen.
       crossOriginResourcePolicy: { policy: 'cross-origin' },
@@ -61,24 +59,6 @@ export function createApp(config, deps = {}) {
   app.use('/api/v1/devices', withCors, createDevicesRouter({ devices, profiles, library }));
   app.use('/api/v1', withCors, createV1Router({ config, library, profiles, history, subtitles }));
   app.use('/media', withCors, createMediaRouter({ library, thumbs }));
-
-  app.use('/api', createLegacyRouter({ mediaRoot: config.mediaRoot, thumbs }));
-
-  // Biblioteca (solo lectura, con HTTP Range) y miniaturas generadas.
-  // /source es el prefijo legacy que usa el front viejo (el front nuevo usa /media/:id).
-  app.use('/source', async (req, _res, next) => {
-    let rel;
-    try {
-      rel = decodeURIComponent(req.path);
-    } catch {
-      return next(new HttpError(400, 'INVALID_PATH', 'Ruta mal codificada'));
-    }
-    // Solo archivos existentes, dentro de MEDIA_ROOT y con extensión permitida.
-    await resolveInside(config.mediaRoot, rel, { type: 'file', extensions: SERVABLE_EXTENSIONS });
-    next();
-  });
-  app.use('/source', express.static(config.mediaRoot, { index: false, dotfiles: 'deny' }));
-  app.use('/thumbs', express.static(config.thumbsDir, { index: false, dotfiles: 'deny' }));
 
   // Interfaz nueva para la TV (apps/tv, WU-11). Ruteo por hash → no necesita fallback SPA.
   if (config.tvDir) {
@@ -99,8 +79,8 @@ export function createApp(config, deps = {}) {
     );
   }
 
-  // Front Angular viejo (build compilado), hasta WU-15.
-  app.use(express.static(config.publicDir));
+  // La raíz lleva a la interfaz de TV (el front Angular viejo se eliminó en WU-15).
+  if (config.tvDir) app.get('/', (_req, res) => res.redirect(302, '/tv/'));
 
   app.use(notFound);
   app.use(errorHandler);

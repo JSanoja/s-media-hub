@@ -23,7 +23,6 @@ before(async () => {
   });
   const app = createApp(
     {
-      publicDir: tmp,
       mediaRoot: tmp,
       cacheDir: path.join(tmp, 'cache'),
       thumbsDir: path.join(tmp, 'cache', 'thumbs'),

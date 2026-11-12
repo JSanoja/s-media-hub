@@ -15,7 +15,6 @@ test(
   async () => {
     const tmp = mkdtempSync(path.join(tmpdir(), 'shub-tv-'));
     const app = createApp({
-      publicDir: tmp,
       tvDir,
       mediaRoot: tmp,
       cacheDir: path.join(tmp, 'c'),
@@ -32,6 +31,10 @@ test(
     try {
       const redirect = await fetch(`${base}/tv`, { redirect: 'manual' });
       assert.equal(redirect.status, 301);
+      // La raíz lleva a la interfaz de TV (ya no está el front Angular viejo, WU-15).
+      const root = await fetch(`${base}/`, { redirect: 'manual' });
+      assert.equal(root.status, 302);
+      assert.equal(root.headers.get('location'), '/tv/');
       const res = await fetch(`${base}/tv/`);
       assert.equal(res.status, 200);
       assert.match(await res.text(), /<div id="app">/);

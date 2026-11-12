@@ -67,7 +67,6 @@ before(async () => {
     else await writeFile(full, content);
   }
   const app = createApp({
-    publicDir: path.join(tmp, 'public'),
     tvDir: path.join(tmp, 'tv-no-compilada'),
     mediaRoot: media,
     cacheDir: path.join(tmp, 'cache'),
