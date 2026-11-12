@@ -1,29 +1,41 @@
-# android-tv — app S-HUB para Chromecast with Google TV
+# android-tv: S-HUB app for Chromecast with Google TV
 
-App Android TV (Kotlin) que carga la interfaz web de `apps/tv` (servida por la API en `/tv/`) en un WebView y reproduce con **Media3/ExoPlayer** nativo (MKV, MP4, HEVC, AC3/EAC3 passthrough, subtítulos VTT). Aparece en el menú de apps de la TV (launcher Leanback). Ver `workunits/WU-12-android-tv-app.md`.
+Android TV app (Kotlin). It loads the `apps/tv` web UI, served by the API at `/tv/`, in a WebView. Playback uses native **Media3/ExoPlayer**: MKV, MP4, HEVC, AC3/EAC3 passthrough and WebVTT subtitles. The app shows up in the TV's apps row (Leanback launcher). See `workunits/WU-12-android-tv-app.md`.
 
-## Requisitos (una sola vez, en WSL)
+## Requirements (one time, on WSL/Linux)
 
 ```bash
 bash apps/android-tv/scripts/setup-wsl.sh   # JDK 17 + Android SDK + Gradle 8.11.1 + gradlew
 source ~/.bashrc
 ```
 
-## Compilar e instalar
+## Build and install
 
-1. En la TV: Opciones para desarrolladores → **Depuración inalámbrica** activada; anotá IP:puerto.
-2. La API corriendo con la interfaz compilada (`npm run build && npm run dev` en la raíz).
-3. ```bash
-   bash apps/android-tv/scripts/deploy.sh 192.168.1.3:<puerto>
+1. On the TV, go to Developer options and turn on **Wireless debugging**. Note the IP:port it shows.
+2. Start the API with the built UI: `npm run build && npm run dev` from the repo root.
+3. Run:
+   ```bash
+   bash apps/android-tv/scripts/deploy.sh <tv-ip>:<port>
    ```
 
-La URL del servidor por defecto es `http://192.168.1.5:30001` (`gradle.properties` → `shub.serverUrl`, o `SERVER_URL=... deploy.sh`). Dentro de la app se puede cambiar: si no conecta aparece "Cambiar servidor" (y la tecla MENU, si el control la tiene).
+The default server URL comes from `gradle.properties` (`shub.serverUrl`), or you can pass `SERVER_URL=... deploy.sh`. You can also change it inside the app: when the app can't connect it offers **Change server**, and the MENU key opens the same dialog if your remote has one.
 
-## Control remoto
+## Remote control
 
-- Interfaz: flechas para moverse, OK para elegir, Atrás para volver.
-- Reproductor: OK = play/pausa · ←/→ = −10 s / +10 s · ↑/↓ = controles (subtítulos, pistas) · Atrás = salir. Al terminar pasa al siguiente episodio.
+- **UI:** arrows to move, OK to select, Back to go back.
+- **Player:**
+  - OK: play/pause.
+  - ← / →: −10 s / +10 s.
+  - ↑: show controls (subtitles, tracks).
+  - ↓: subtitle sync panel. In the panel, ← / → move the subtitles by 0.5 s and ↑ / ↓ by 0.1 s. The offset is saved for that video.
+  - Back: exit.
+- When a video ends, the next episode starts.
 
-## Versiones
+## What the app reports to the API
+
+- Playback progress every 15 s and on pause, for the profile in use.
+- A device heartbeat with what is playing. While the app is in the background it sends nothing, so the device turns inactive after `DEVICE_ACTIVE_SECONDS`.
+
+## Versions
 
 AGP 8.7.3 · Kotlin 2.0.21 · Gradle 8.11.1 · compile/target SDK 35 · minSdk 26 · Media3 1.5.1 · JDK 17.

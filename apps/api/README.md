@@ -1,80 +1,88 @@
 # @s-hub/api
 
-API Node/Express que sirve la biblioteca de videos local. Parte del monorepo `s-hub`.
+Node/Express API that serves the local video library. Part of the `s-hub` monorepo.
 
-Estado: **WU-05** — API v1 para el front nuevo/Chromecast + endpoints legacy del front viejo.
+It serves API v1 for the TV UI and the Android TV app, media streaming, profiles, watch history, devices and subtitles, plus the legacy endpoints of the old Angular front end (to be removed in WU-15).
 
-## Requisitos
+## Requirements
 
-- Node `>= 22.13` (recomendado 24 LTS)
-- ffmpeg/ffprobe: vienen incluidos vía `ffmpeg-static` / `ffprobe-static` (se pueden reemplazar con `FFMPEG_PATH` / `FFPROBE_PATH`).
+- Node `>= 22.13` (24 LTS recommended). `node:sqlite` must be available.
+- ffmpeg/ffprobe are bundled through `ffmpeg-static` / `ffprobe-static`. Set `FFMPEG_PATH` / `FFPROBE_PATH` to use other builds.
 
-## Uso (desde la raíz del monorepo)
+## Usage (from the monorepo root)
 
 ```bash
 npm install
-npm run dev     # node --watch, recarga al guardar
+npm run dev     # node --watch, reloads on save
 npm start
 npm test        # node:test
 ```
 
-Configuración: copiar `.env.example` a `.env` (opcional).
+Configuration: copy `.env.example` to `.env`. Every variable is documented there and in the [root README](../../README.md#-environment-variables).
 
-| Variable                       | Default            | Uso                                                  |
-| ------------------------------ | ------------------ | ---------------------------------------------------- |
-| `HOST`                         | `0.0.0.0`          | Interfaz de escucha (todas → accesible desde la LAN) |
-| `PORT`                         | `3000`             | Puerto                                               |
-| `FFMPEG_PATH` / `FFPROBE_PATH` | binarios incluidos | Override de ffmpeg/ffprobe                           |
-| `LOG_FORMAT`                   | `dev`              | Formato de morgan (`dev`, `combined`, `off`)         |
+## API v1 (TV UI / Android TV app)
 
-El resto de la configuración de red (`PROTOCOL`, `PUBLIC_HOST`, `MEDIA_ROOT`, …) se agrega en WU-03.
+Every URL the API returns is **absolute** and built from `PUBLIC_BASE_URL`. Ids are opaque: the base64url of the path relative to `MEDIA_ROOT`, and the root is `root`. CORS is enabled on `/api/v1/*` and `/media/*`. The contract is in JSDoc: `packages/shared/src/index.js`.
 
-## API v1 (front nuevo / Chromecast)
+Endpoints marked 🔑 require a profile session (header `X-Profile-Token`). On the others the header is optional: when present, items include that profile's `progress`.
 
-Todas las URLs que devuelve son **absolutas** (`PUBLIC_BASE_URL`). Los ids son opacos (base64url de la ruta relativa; la raíz es `root`). CORS habilitado en `/api/v1/*` y `/media/*`. Contrato en JSDoc: `packages/shared/src/index.js`.
-
-| Endpoint                                        | Devuelve                                                                                              |
+| Endpoint                                        | Returns                                                                                               |
 | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
 | `GET /api/health`                               | `{ status: "ok" }`                                                                                    |
 | `GET /api/v1/config`                            | `{ publicBaseUrl, castReceiverAppId, version }`                                                       |
-| `GET /api/v1/library[?path=<folderId>]`         | Carpeta: `{ id, type, title, year, parentId, posterUrl, folders[], items[] }`                         |
-| `GET /api/v1/items/:id`                         | Video con `streamUrl`, `thumbUrl`, `posterUrl`, `subtitles[]`, `size`                                 |
-| `GET /api/v1/items/:id/next`                    | `{ next: Item \| null }` (orden natural, cruza temporadas)                                            |
-| `GET /api/v1/profiles`                          | Perfiles `[{ id, name, color }]` (WU-21)                                                              |
+| `GET /api/v1/library[?path=<folderId>]`         | Folder: `{ id, type, title, year, parentId, posterUrl, folders[], items[] }`                          |
+| `GET /api/v1/items/:id`                         | Video with `streamUrl`, `thumbUrl`, `posterUrl`, `subtitles[]`, `size`, `progress`                    |
+| `GET /api/v1/items/:id/next`                    | `{ next: Item \| null }` (natural order, crosses seasons)                                             |
+| `GET /api/v1/continue-watching` 🔑              | Items in progress for the profile, most recent first                                                  |
+| `PUT /api/v1/items/:id/progress` 🔑             | `{ positionSec, durationSec?, deviceId?, ended? }` → `progress` (≥ 90 % marks it watched)             |
+| `POST` / `DELETE /api/v1/items/:id/watched` 🔑  | Mark or unmark the video as watched                                                                   |
+| `PUT /api/v1/items/:id/subtitles/:subId/offset` | `{ offsetMs }` (±600000) → saves that subtitle's sync offset for the video                            |
+| `GET /api/v1/profiles`                          | Profiles `[{ id, name, color }]`                                                                      |
 | `POST /api/v1/profiles/:id/session`             | `{ pin, deviceId }` → `{ token, profile }` · 401 `INVALID_PIN` (+`attemptsLeft`) · 429 `PIN_LOCKED`   |
-| `GET /api/v1/profiles/me`                       | Perfil del header `X-Profile-Token` (401 `PROFILE_REQUIRED`)                                          |
-| `DELETE /api/v1/profiles/session`               | Cerrar sesión (header `X-Profile-Token`)                                                              |
-| `PUT /api/v1/profiles/:id/pin`                  | `{ currentPin, newPin, deviceId }` → 204, cierra las sesiones del perfil                              |
-| `PUT /api/v1/items/:id/subtitles/:subId/offset` | `{ offsetMs }` (±600000) → guarda el ajuste de sincronización del subtítulo para ese video (WU-18)    |
-| `POST /api/v1/devices/heartbeat`                | `{ deviceId, kind, name?, model?, appVersion?, nowPlaying? }` → Device (WU-19; perfil por token)      |
-| `GET /api/v1/devices[?active=1]`                | Dispositivos (activos = heartbeat hace < `DEVICE_ACTIVE_SECONDS`, 120 s) con lo que reproducen        |
-| `DELETE /api/v1/devices/:id`                    | Olvidar un dispositivo (204 · 404)                                                                    |
-| `GET /media/:id`                                | Video con HTTP Range (206)                                                                            |
-| `GET /media/:id/thumb.jpg`                      | Miniatura (se genera la primera vez)                                                                  |
-| `GET /media/:id/subtitles.vtt[?offsetMs=]`      | Subtítulo en WebVTT (los `.srt` se convierten; UTF-8 o Windows-1252); `offsetMs` desplaza los tiempos |
-| `GET /media/folders/:id/cover`                  | Póster de la carpeta (`cover` > `poster` > `folder`; `.webp` > `.jpg` > `.png`)                       |
+| `GET /api/v1/profiles/me`                       | Profile of the `X-Profile-Token` header (401 `PROFILE_REQUIRED`)                                      |
+| `DELETE /api/v1/profiles/session`               | Log out (header `X-Profile-Token`)                                                                    |
+| `PUT /api/v1/profiles/:id/pin`                  | `{ currentPin, newPin, deviceId }` → 204, closes all of the profile's sessions                        |
+| `POST /api/v1/devices/heartbeat`                | `{ deviceId, kind, name?, model?, appVersion?, nowPlaying? }` → Device (profile taken from the token) |
+| `GET /api/v1/devices[?active=1]`                | Devices (active = heartbeat less than `DEVICE_ACTIVE_SECONDS` ago, default 120 s) and what they play  |
+| `DELETE /api/v1/devices/:id`                    | Forget a device (204 · 404)                                                                           |
+| `GET /media/:id`                                | Video with HTTP Range (206)                                                                           |
+| `GET /media/:id/thumb.jpg`                      | Thumbnail (generated on first request, then cached)                                                   |
+| `GET /media/:id/subtitles.vtt[?offsetMs=]`      | Subtitle as WebVTT (`.srt` converted; UTF-8 or Windows-1252). `offsetMs` shifts every cue             |
+| `GET /media/folders/:id/cover`                  | Folder poster (`cover` > `poster` > `folder`; `.webp` > `.jpg` > `.png`)                              |
 
-Tipos de carpeta (automático): `library` (raíz), `movie` (1 video, sin subcarpetas), `series` (subcarpetas "Temporada N"/"Season N"/"S1" o mayoría de videos con SxxEyy/cap N), `season`, `folder`.
+Folder types (detected automatically):
 
-Convención de biblioteca:
+- `library`: the root.
+- `movie`: a single video and no subfolders.
+- `series`: subfolders named "Season N", "Temporada N" or "S1", or mostly videos named with SxxEyy or "cap N".
+- `season`: a season folder inside a series.
+- `folder`: anything else.
+
+Subtitle language: when the file name says it (`movie.es.srt`), that wins. Otherwise the API detects it from the content and sets `langSource: "content"`. If neither works, the language is `und`. The result is cached in SQLite.
+
+Library layout:
 
 ```
-Película (2010) [1080p]/      → movie
+Movie (2010) [1080p]/         → movie
   cover.webp
-  Pelicula.2010.1080p.mp4
-  Pelicula.2010.1080p.srt     (o .es.srt / .en.srt)
-Serie/                        → series
+  Movie.2010.1080p.mp4
+  Movie.2010.1080p.srt        (or .es.srt / .en.srt)
+Series/                       → series
   cover.webp
-  Temporada 1/                → season
-    Serie.S01E01.mp4
-    Serie.S01E01.es.srt
+  Season 1/                   → season
+    Series.S01E01.mp4
+    Series.S01E01.es.srt
 ```
 
-## Endpoints legacy (front Angular viejo, hasta WU-15)
+### Errors
 
-### `GET /api/browse?path=/serie/temporada` (legacy)
+Errors are always JSON: `{ "error": { "code": "NOT_FOUND", "message": "..." } }`. Common codes: 400 `INVALID_PATH`, 404 `NOT_FOUND`, 415 `UNSUPPORTED_TYPE`.
 
-Lista una carpeta de `public/source`. Si hay más de un video, genera en segundo plano las miniaturas faltantes (`<video>.mp4.jpg`).
+## Legacy endpoints (old Angular front end, until WU-15)
+
+### `GET /api/browse?path=/series/season` (legacy)
+
+Lists a folder of `MEDIA_ROOT`. When there is more than one video, it generates the missing thumbnails in the background.
 
 ```json
 {
@@ -85,45 +93,42 @@ Lista una carpeta de `public/source`. Si hay más de un video, genera en segundo
 }
 ```
 
-### `GET /api/thumb?path=/serie/temporada/cap1.mp4` (legacy)
+### `GET /api/thumb?path=/series/season/cap1.mp4` (legacy)
 
-Genera la miniatura del video. Responde `sucess` (texto, sic) o un error JSON.
+Generates the video's thumbnail. Responds `sucess` (plain text, sic) or a JSON error.
 
-### Estáticos
+### Static files
 
-- `/` → build del front Angular viejo (`public/`, se elimina en WU-15).
-- `/source/...` → videos e imágenes, con soporte de HTTP Range.
+- `/` → build of the old Angular front end (`public/`, removed in WU-15).
+- `/source/...` → videos and images from `MEDIA_ROOT`, with HTTP Range support.
+- `/tv/` → the new TV UI (`apps/tv/dist`).
 
-### Errores
-
-Siempre JSON: `{ "error": { "code": "NOT_FOUND", "message": "..." } }`.
-
-## Estructura
+## Structure
 
 ```
 src/
-  server.js              arranque HTTP/HTTPS + graceful shutdown
-  app.js                 createApp(config) (testeable)
-  config.js              variables de entorno (validadas)
-  routes/v1.js           /api/v1 (config, library, items, next)
-  routes/media.js        /media (stream, thumb, subtítulos, covers)
-  routes/legacy.js       /api/browse, /api/thumb (front viejo)
-  services/library.js    recorrido y clasificación de la biblioteca
-  services/ffmpeg.js     wrapper spawn de ffmpeg/ffprobe
-  services/thumbs.js     miniaturas en CACHE_DIR (con deduplicación)
-  services/db.js         SQLite embebido (node:sqlite) + migraciones → CACHE_DIR/shub.db
-  services/profiles.js   perfiles con PIN (scrypt), sesiones por token, bloqueo por intentos
+  server.js              HTTP/HTTPS startup + graceful shutdown
+  app.js                 createApp(config) (testable)
+  config.js              environment variables (validated)
+  routes/v1.js           /api/v1 (config, library, items, next, history, subtitle offsets)
+  routes/media.js        /media (stream, thumbnail, subtitles, covers)
   routes/profiles.js     /api/v1/profiles
-  services/devices.js    dispositivos y heartbeat (WU-19)
-  services/subtitles.js  idioma detectado (cache) y ajuste de sincronización (WU-18)
-  lib/langDetect.js      idioma por contenido (palabras frecuentes, sin dependencias)
   routes/devices.js      /api/v1/devices
-  lib/                   ids, naming, subtitles, safePath, cors, rateLimit, errors
+  routes/legacy.js       /api/browse, /api/thumb (old front end)
+  services/library.js    walks and classifies the library
+  services/db.js         embedded SQLite (node:sqlite) + migrations → CACHE_DIR/shub.db
+  services/profiles.js   PIN profiles (scrypt), token sessions, attempt lockout
+  services/history.js    per-profile watch state ("Continue watching", watched)
+  services/devices.js    devices and heartbeat
+  services/subtitles.js  detected language (cached) and sync offsets
+  services/ffmpeg.js     spawn wrapper for ffmpeg/ffprobe
+  services/thumbs.js     thumbnails in CACHE_DIR (deduplicated)
+  lib/                   ids, naming, subtitles, langDetect, safePath, cors, rateLimit, errors, auth
 scripts/migrate-thumbs.js
 test/                    node:test
 ```
 
-## Pendiente conocido
+## Known gaps
 
-- Duración y compatibilidad Cast (`durationSec`, `castCompatible`) e índice en SQLite → **WU-06**.
-- Remux/transcode de formatos no compatibles → **WU-08**.
+- Duration and cast compatibility (`durationSec`, `castCompatible`) and a SQLite index → **WU-06**.
+- Remux/transcode of unsupported formats → **WU-08**.
